@@ -1,0 +1,12 @@
+# F3 / F4 依赖
+# 安装命令：
+#   pip install -r requirements-f3f4.txt -i http://vivo-private-pip.vivo.lan:9090 --extra-index-url https://mirrors.aliyun.com/pypi/simple --trusted-host vivo-private-pip.vivo.lan
+
+# 向量编码模型
+sentence-transformers>=2.7.0
+
+# Qdrant 客户端（本地 Docker 或云端均可）
+qdrant-client>=1.9.0
+
+# 数值计算（sentence-transformers 依赖，通常自动安装）
+numpy>=1.26.0

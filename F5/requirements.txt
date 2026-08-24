@@ -1,0 +1,11 @@
+# F5 依赖
+# 安装命令：
+#   pip install -r requirements.txt -i http://vivo-private-pip.vivo.lan:9090 --extra-index-url https://mirrors.aliyun.com/pypi/simple --trusted-host vivo-private-pip.vivo.lan
+
+# 核心计算
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.4.0
+
+# 梯度提升（可选，若安装失败脚本自动降级为随机森林）
+lightgbm>=4.3.0

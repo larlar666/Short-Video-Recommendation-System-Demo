@@ -1,0 +1,15 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+
+# Local IDE/editor settings
+.idea/
+.cursor/
+
+# Local environments and secrets
+.venv/
+venv/
+.env
+
+# Large generated event log; retained locally but excluded from GitHub
+F2/data/watch_events.csv

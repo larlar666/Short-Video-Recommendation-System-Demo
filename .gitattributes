@@ -1,0 +1,8 @@
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text
+F2/data/watch_events.csv filter=lfs diff=lfs merge=lfs -text
+F1/data/*.csv filter=lfs diff=lfs merge=lfs -text
+F2/data/*.csv filter=lfs diff=lfs merge=lfs -text
+F5/data/*.csv filter=lfs diff=lfs merge=lfs -text
+F6/data/*.csv filter=lfs diff=lfs merge=lfs -text
+F7/data/*.csv filter=lfs diff=lfs merge=lfs -text

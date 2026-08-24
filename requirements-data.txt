@@ -1,0 +1,9 @@
+datasets>=2.16.0
+pyarrow>=14.0.0
+huggingface_hub>=0.20.0
+# 仅导出 .parquet 时需要；纯 CSV 导出已改用标准库 csv
+pandas>=2.0.0
+# 可选加速：pip install hf_transfer 后设置环境变量 HF_HUB_ENABLE_HF_TRANSFER=1
+# hf_transfer>=0.1.6
+# 语言检测：过滤非英语/西班牙语视频
+langdetect>=1.0.9
