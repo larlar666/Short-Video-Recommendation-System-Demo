@@ -1,5 +1,9 @@
 # 短视频推荐系统 — 项目技术报告
 
+> **数据库接入更新**：应用现已默认从 Supabase / PostgreSQL 读取数据，包含版本化迁移、外键与索引、COPY 批量导入及导入记录。首次运行请先阅读 [Supabase 接入说明](database/README.md)，配置 `.env`，执行 `python -m database.migrate` 和 `python -m database.import_data`。下文 CSV 流水线仍用于离线数据生成；旧版文件演示需要显式设置 `DATA_BACKEND=csv`。Qdrant 向量检索保持独立。
+
+> **容量优化（002 迁移）**：行为数据改为整数视频字典、按用户打包历史与按视频保存每轮统计，完整保留去重后的观看和点赞事件；不再向 Supabase 写数百万行原始 `watch_events`。导入默认使用 450 MB 数据库软上限并检查实际占用。已有项目先执行迁移再导入，详见接入说明。用户/视频向量继续存放在 Qdrant。
+
 ---
 
 ## 目录
@@ -721,3 +725,22 @@ F7 依赖 Qdrant "users" collection（需先运行 F3），结果包含每簇的
 ---
 
 *报告生成时间：2026-05-11*
+
+## 九、算法质量与速度对照实验（新增）
+
+实验代码、指标口径及运行方法见 [experiments/README.md](experiments/README.md)。在项目根目录执行：
+
+```powershell
+python -m pip install -r requirements-experiments.txt
+python experiments/benchmark.py
+```
+
+默认比较同一批用户向量的全量搜索与聚类候选搜索，以及用户/视频的随机初始化 K-Means、K-Means++、SVD + K-Means++。输出 Recall@K、查询平均/P50/P95 耗时、加速比、统一原空间的聚类轮廓系数、聚类总耗时等，保留逐查询和逐随机种子结果。默认视频实验为 10,000 个视频子集，不能当作完整库结果。
+
+在 Streamlit 侧栏勾选“查看算法对照实验”可查看表格、耗时图和下载结果。已有 Qdrant 集合的同向量对照可执行：
+
+```powershell
+python experiments/benchmark.py --source qdrant --tasks search users --out experiments/results/qdrant
+```
+
+本地实验使用加权标签向量，Qdrant 实验才读取已有语义向量；两组结果分开保存。轮廓系数不是准确率，主兴趣标签一致性也不等同于真实推荐准确率，最终结论以实测结果为准。

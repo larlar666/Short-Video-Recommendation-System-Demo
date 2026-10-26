@@ -1,10 +1,24 @@
 import ast
+import logging
 from pathlib import Path
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+
+from database.config import backend as data_backend
+from database.repository import load_catalog, user_watch_events, video_watch_counts
+from database.errors import error_summary, error_code
+
+logger = logging.getLogger(__name__)
+
+
+def show_data_error(stage, error):
+    logger.error("%s (%s)", stage, type(error).__name__, exc_info=True)
+    st.error(f"{stage}：{error_summary(error)}")
+    with st.expander("诊断信息"):
+        st.code(error_code(error))
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -108,8 +122,19 @@ def parse_list_cell(x):
         return []
 
 
-@st.cache_data
-def load_data():
+@st.cache_data(ttl=300)
+def load_data(source):
+    if source == "supabase":
+        data = load_catalog()
+        if "videos" in data:
+            videos = data["videos"]
+            videos["preference_tags_list"] = videos["preference_tags"].apply(parse_list_cell).apply(_filter_tags)
+            videos["fields_list"] = videos["fields"].apply(parse_list_cell)
+        if "users" in data:
+            users = data["users"]
+            users["interest_fields_list"] = users["interest_fields"].apply(parse_list_cell)
+            users["interest_tags_list"] = users["interest_tags"].apply(parse_list_cell).apply(_filter_tags)
+        return data
     data = {}
 
     if F1_VIDEO.exists():
@@ -165,7 +190,7 @@ def load_data():
 def ensure_data(data, keys):
     miss = [k for k in keys if k not in data]
     if miss:
-        st.warning(f"缺少数据文件：{', '.join(miss)}，请先运行对应脚本生成数据。")
+        st.warning(f"缺少数据：{', '.join(miss)}。数据库模式请运行导入脚本，CSV 模式请生成对应文件。")
         return False
     return True
 
@@ -553,7 +578,7 @@ def f3_panel(users: pd.DataFrame):
                 st.caption("提示：安装 `wordcloud` 库后可显示词云（`pip install wordcloud`）")
 ## 更改👆
 
-def f4_panel(users: pd.DataFrame, videos: pd.DataFrame, events: pd.DataFrame):
+def f4_panel(users: pd.DataFrame, videos: pd.DataFrame, events):
     st.subheader("F4 用户历史与相关视频推荐")
     st.caption("输入 user_id，展示历史记录并给出相关视频推荐（支持 Qdrant 向量版）。")
 
@@ -575,6 +600,8 @@ def f4_panel(users: pd.DataFrame, videos: pd.DataFrame, events: pd.DataFrame):
     urow = urow.iloc[0]
 
 ## 更改：
+    if events is None:
+        events = cached_user_watch_events(int(uid))
     uevents = events[
         (events["user_id"] == int(uid)) &
         (events["event_type"] == "watch")
@@ -641,7 +668,7 @@ def f4_panel(users: pd.DataFrame, videos: pd.DataFrame, events: pd.DataFrame):
     st.dataframe(rec[show_cols], use_container_width=True)
 
 ## 更改：
-def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
+def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events):
     st.subheader("F5 视频热度预测")
 
     c1, c2 = st.columns(2)
@@ -714,11 +741,19 @@ def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
         total_pred = sum(pred_median_vals)
 
     # 真实总播放量
-    real_rows = events[
-        (events["video_id"] == str(selected_vid)) &
-        (events["event_type"] == "watch")
-    ].groupby("round").size()
-    total_real = int(real_rows.sum())
+    if events is None:
+        try:
+            real_rows = cached_video_watch_counts(str(selected_vid))
+        except Exception as error:
+            show_data_error("读取真实观看统计失败", error)
+            st.info("真实观看统计暂不可用，以下仍显示已加载的预测结果。")
+            real_rows = None
+    else:
+        real_rows = events[
+            (events["video_id"] == str(selected_vid)) &
+            (events["event_type"] == "watch")
+        ].groupby("round").size()
+    total_real = int(real_rows.sum()) if real_rows is not None else None
 
     # 趋势判断
     early_avg = sum(pred_median_vals[:5]) / 5 if len(pred_median_vals) > 5 else 1
@@ -751,7 +786,7 @@ def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
     with col2:
         st.metric("预测总播放量（第4~30轮）", f"{int(total_pred)}")
     with col3:
-        st.metric("真实总播放量", f"{total_real}")
+        st.metric("真实总播放量", str(total_real) if total_real is not None else "暂不可用")
 
     st.markdown(f"**热度趋势预测：** :{trend_color}[{trend}]")
     st.markdown("---")
@@ -762,14 +797,15 @@ def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
         "播放量": noisy_vals,
         "类型": ["模型预测（噪声曲线）"] * len(rounds_sorted[H:]),
     })
-    full_rounds = list(range(1, 31))
-    real_full_vals = [real_rows.get(r, 0) for r in full_rounds]
-    real_df = pd.DataFrame({
-        "round": [f"round_{r}" for r in full_rounds],
-        "播放量": real_full_vals,
-        "类型": ["真实完整数据"] * len(full_rounds),
-    })
-    combined = pd.concat([pred_df, real_df], ignore_index=True)
+    combined = pred_df
+    if real_rows is not None:
+        full_rounds = list(range(1, 31))
+        real_df = pd.DataFrame({
+            "round": [f"round_{r}" for r in full_rounds],
+            "播放量": [real_rows.get(r, 0) for r in full_rounds],
+            "类型": ["真实完整数据"] * len(full_rounds),
+        })
+        combined = pd.concat([pred_df, real_df], ignore_index=True)
 
     # 置信区间阴影
     band_df = pd.DataFrame({
@@ -788,8 +824,8 @@ def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
         color=alt.Color(
             "类型:N",
             scale=alt.Scale(
-                domain=["模型预测（噪声曲线）", "真实完整数据"],
-                range=["#FF9800", "#4CAF50"]
+                domain=["模型预测（噪声曲线）", "真实完整数据"] if real_rows is not None else ["模型预测（噪声曲线）"],
+                range=["#FF9800", "#4CAF50"] if real_rows is not None else ["#FF9800"]
             )
         ),
         tooltip=["round", "播放量", "类型"],
@@ -797,8 +833,9 @@ def f5_panel(videos: pd.DataFrame, series: pd.DataFrame, events: pd.DataFrame):
 
     st.altair_chart(band + line_chart, use_container_width=True)
     st.caption(
-        "橙色线条为模型预测曲线，绿色线条为全量真实播放数据；橙色阴影区域为预测结果置信区间。本数据集为模拟数据，单轮数据存在随机波动，模型重点研判整体变化趋势。"
-        "注：F2模拟数据每轮独立随机抽样，真实曲线存在较大随机波动，模型重点预测整体趋势"
+        "橙色线条为模型预测曲线，橙色阴影为预测结果置信区间。"
+        + ("绿色线条为全量真实播放数据。" if real_rows is not None else "真实观看统计尚未加载，图中仅显示预测结果。")
+        + "本数据集为模拟数据，单轮数据存在随机波动，模型重点研判整体变化趋势。"
     )
     
 
@@ -1244,12 +1281,36 @@ def f7_panel(user_clusters: pd.DataFrame, users: pd.DataFrame):
     st.info(f"**簇{cid}：{title}**\n\n{desc}")
 
 
+@st.cache_data(ttl=300)
+def cached_user_watch_events(user_id):
+    return user_watch_events(user_id)
+
+
+@st.cache_data(ttl=300)
+def cached_video_watch_counts(video_id):
+    return video_watch_counts(video_id)
+
+
 def main():
     st.set_page_config(page_title="短视频推荐系统 F1-F7", layout="wide")
     st.title("短视频推荐系统（F1-F7）")
-    st.caption("基于现有数据文件的一站式演示页面")
+    if st.sidebar.checkbox("查看算法对照实验", key="show_algorithm_benchmarks"):
+        from experiments.ui import experiments_panel
 
-    data = load_data()
+        experiments_panel()
+        return
+    try:
+        source = data_backend()
+        st.caption("Supabase / PostgreSQL 数据服务" if source == "supabase" else "CSV 离线演示模式")
+        st.sidebar.caption(f"数据源：{'Supabase / PostgreSQL' if source == 'supabase' else 'CSV'}")
+        if st.sidebar.button("刷新数据"):
+            st.cache_data.clear()
+        data = load_data(source)
+    except Exception as error:
+        show_data_error("数据源加载失败", error)
+        st.code("python -m database.migrate\npython -m database.import_data")
+        st.info("接入步骤见 database/README.md；离线演示可设置 DATA_BACKEND=csv。")
+        st.stop()
     MENU_MAP = {
         "F1：构建视频信息库": "F1",
         "F2：模拟用户观看行为": "F2",
@@ -1277,11 +1338,19 @@ def main():
         if ensure_data(data, ["users"]):
             f3_panel(data["users"].reset_index(drop=True))
     elif menu == "F4":
-        if ensure_data(data, ["users", "videos", "events"]):
-            f4_panel(data["users"], data["videos"], data["events"])
+        required = ["users", "videos"] + (["events"] if source == "csv" else [])
+        if ensure_data(data, required):
+            try:
+                f4_panel(data["users"], data["videos"], data.get("events"))
+            except Exception as error:
+                show_data_error("推荐数据处理失败", error)
     elif menu == "F5":
-        if ensure_data(data, ["videos", "series"]):
-            f5_panel(data["videos"], data["series"], data["events"])
+        required = ["videos", "series"] + (["events"] if source == "csv" else [])
+        if ensure_data(data, required):
+            try:
+                f5_panel(data["videos"], data["series"], data.get("events"))
+            except Exception as error:
+                show_data_error("预测结果处理失败", error)
     elif menu == "F6":
         if ensure_data(data, ["video_clusters", "videos"]):
             f6_panel(data["video_clusters"], data["videos"])

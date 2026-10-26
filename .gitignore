@@ -8,8 +8,13 @@ __pycache__/
 
 # Local environments and secrets
 .venv/
+.venv-experiments/
+experiments/.wheels/
 venv/
 .env
+.env.*
+!.env.example
+.streamlit/secrets.toml
 
 # Large generated event log; retained locally but excluded from GitHub
 F2/data/watch_events.csv

@@ -1,0 +1,73 @@
+{
+  "created_at_utc": "2026-10-23T07:08:19.274832+00:00",
+  "source": "local",
+  "config": {
+    "source": "local",
+    "users": "C:\\Users\\a1234\\Desktop\\作业\\短视频推荐系统+刘安然+陈钰婷+陈妍+任怡博\\F2\\data\\users_sim.csv",
+    "events": "C:\\Users\\a1234\\Desktop\\作业\\短视频推荐系统+刘安然+陈钰婷+陈妍+任怡博\\F2\\data\\watch_events.parquet",
+    "tasks": [
+      "search",
+      "users",
+      "videos"
+    ],
+    "out": "C:\\Users\\a1234\\Desktop\\作业\\短视频推荐系统+刘安然+陈钰婷+陈妍+任怡博\\experiments\\results\\local",
+    "qdrant_url": "http://localhost:6333",
+    "collection": "users",
+    "hnsw_ef": 128,
+    "seed": 42,
+    "clusters": 20,
+    "queries": 100,
+    "top_k": 10,
+    "repeats": 3,
+    "cluster_repeats": 3,
+    "video_limit": 10000,
+    "eval_samples": 1500,
+    "svd_dim": 64,
+    "threads": 1
+  },
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpu": "AMD64 Family 25 Model 117 Stepping 2, AuthenticAMD",
+    "packages": {
+      "numpy": "2.4.4",
+      "pandas": "3.0.1",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.9.1",
+      "threadpoolctl": "3.7.0"
+    }
+  },
+  "inputs": [
+    {
+      "path": "C:\\Users\\a1234\\Desktop\\作业\\短视频推荐系统+刘安然+陈钰婷+陈妍+任怡博\\F2\\data\\users_sim.csv",
+      "sha256": "8b1f0b7622c3152b2ec41477c88bbbe4f549d0d945f1111c2731da9eeee652c6"
+    },
+    {
+      "path": "C:\\Users\\a1234\\Desktop\\作业\\短视频推荐系统+刘安然+陈钰婷+陈妍+任怡博\\F2\\data\\watch_events.parquet",
+      "sha256": "5c0be12e36ffa80f7b855ec4729d68c237764ebcd80648309d3a21a05d445c16"
+    }
+  ],
+  "notes": [
+    "Local vectors are weighted tags, not MPNet semantic embeddings.",
+    "Same-field precision and ARI/NMI are simulation label proxies, not real recommendation accuracy.",
+    "Silhouette uses fixed sampled rows in original normalized space with cosine distance.",
+    "Timings exclude data loading and evaluation; SVD time is included in cluster total.",
+    "Feature storage is array storage, NOT peak process RAM.",
+    "Qdrant timings include HTTP round trips; server may choose a full scan for small collections.",
+    "Qdrant collection must remain unchanged throughout the benchmark."
+  ],
+  "search": {
+    "n": 10000,
+    "dimensions": 1873,
+    "queries": 100,
+    "top_k": 10,
+    "cluster_index_build_s": 18.695854400051758,
+    "qdrant_query_config": null
+  },
+  "videos": {
+    "n": 10000,
+    "users": 10000,
+    "nnz": 716312,
+    "sample_limit": 10000
+  }
+}
